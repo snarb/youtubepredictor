@@ -8,55 +8,49 @@ SEQUENCE_LENGTH = 8
 PREDICTION_DELTA = 4
 VIEWS_SCALE_KOEF = 0
 BATCH_SIZE = 1
-COLUMNS_COUNT = 1
 TRAIN_STEPS = 30000
 DISPLAY_STEPS = 200
 
 FILE_NAME = "_s:{}_p:{}".format(SEQUENCE_LENGTH, PREDICTION_DELTA)
 # views column index - 1. ['channel_subscribers', 'views', 'engagements', 'sentiment']
 
-def unison_shuffled_copies(a, b):
-    assert len(a) == len(b)
-    p = np.random.permutation(len(a))
-    return a[p], b[p]
-
-def LoadData(name):
+def LoadCleanData(name):
     global VIEWS_SCALE_KOEF
 
-    all_training_data = np.load('data/' + name + FILE_NAME + "_training_data.npy" )
-    all_lables = np.load('data/' + name + FILE_NAME + "_lables.npy")
+    training_data = np.load('data/' + name + FILE_NAME + "_training_data.npy" )
+    lables = np.load('data/' + name + FILE_NAME + "_lables.npy")
 
-    sta = np.vstack(all_training_data)
-    df = pd.DataFrame(sta, columns=['channel_subscribers', 'views', 'engagements', 'sentiment'])
-    df[df < 0] = 0
-    df[df.views == 0] = 1
-    df[df.channel_subscribers == 0] = 1
-    all_lables[all_lables == 0] = 1
+    training_data = training_data[..., 1] # use only 'views'
 
-    df['views'] = np.log(df['views'])
-    all_lables = np.log(all_lables)
-    df['channel_subscribers'] = np.log(df['channel_subscribers'])
-    df[df.engagements > 1] = 1
-    df[df.sentiment > 1] = 1
+    training_data[training_data == 0] = 1
+    lables[lables == 0] = 1
 
+    training_data =  np.log(training_data)
+    lables = np.log(lables)
 
-    all_training_data = df['views'].values
-    inputs = np.reshape(all_training_data, (-1, BATCH_SIZE, SEQUENCE_LENGTH, COLUMNS_COUNT))
-    output = np.reshape(all_lables, (-1, BATCH_SIZE, 1))
+    return training_data, lables
 
-    return inputs, output
+def GetNextBatch(inputs, lables, batchId):
+    batchId = batchId % len(inputs)
+    startIndex = batchId * BATCH_SIZE
+    endIndex = (batchId + 1) * BATCH_SIZE
+    if(len(inputs) < endIndex):
+        startIndex = 0
+        endIndex = BATCH_SIZE
 
-
-train_inputs, train_lables = LoadData("TRAIN")
+    return (inputs[startIndex:endIndex], lables[startIndex:endIndex])
 
 
-X = tf.placeholder("float", shape=(BATCH_SIZE, SEQUENCE_LENGTH, COLUMNS_COUNT), name="Inputs") #, COLUMNS_COUNT
-Y = tf.placeholder("float", shape=(BATCH_SIZE, 1), name="Outputs")
+train_inputs, train_lables = LoadCleanData("TRAIN")
+
+
+X = tf.placeholder("float", shape=(None, SEQUENCE_LENGTH), name="Inputs") #, COLUMNS_COUNT
+Y = tf.placeholder("float", shape=(None, 1), name="Outputs")
 
 #W = tf.Variable(tf.random_uniform([SEQUENCE_LENGTH, BATCH_SIZE], -1.0, 1.0), name="weight") # COLUMNS_COUNT
-W = tf.Variable(tf.ones([BATCH_SIZE, COLUMNS_COUNT, SEQUENCE_LENGTH]), name="weight") # COLUMNS_COUNT
+W = tf.Variable(tf.ones([SEQUENCE_LENGTH, 1]), name="weight") # COLUMNS_COUNT
 
-pred = tf.reduce_sum(tf.matmul(X,W))
+pred = tf.reduce_sum(tf.matmul(X,W), axis=1)
 
 #loss = tf.reduce_mean(tf.square(pred - Y))
 loss = tf.reduce_mean(tf.square(pred/Y - 1))
@@ -76,42 +70,36 @@ sess.run(init)
 
 # Fit the line.
 for step in range(TRAIN_STEPS):
-    input = train_inputs[step]
-    lable = train_lables[step]
-    sess.run(train, feed_dict={X: input, Y: lable})
+    training_data, lables = GetNextBatch(train_inputs, train_lables, step)
+    inputs = np.reshape(training_data, (BATCH_SIZE, SEQUENCE_LENGTH))
+    output = np.reshape(lables, (BATCH_SIZE, 1))
+
+    sess.run(train, feed_dict={X: inputs, Y: output})
     if step % DISPLAY_STEPS == 0:
-        print(step, sess.run(loss, feed_dict={X: input, Y: lable}))
+        print(step, sess.run(loss, feed_dict={X: inputs, Y: output}))
 
-test_inputs, test_lables = LoadData("TEST")
-test_inputs, test_lables  = unison_shuffled_copies(test_inputs, test_lables )
-
-rseL = []
-mapeL = []
-
-for step in range(len(test_inputs)):
-    input = test_inputs[step]
-    lable = test_lables[step]
-    prediction =  sess.run(pred, feed_dict={X: input})
-
-    originalPredicted = np.exp(np.array(prediction))
-    originalTestOutputs = np.exp(lable)
-
-    rse = ((originalPredicted / originalTestOutputs) - 1) ** 2
-    mapeAr = abs(originalTestOutputs - originalPredicted) / originalTestOutputs
-
-    rseL.append(rse)
-    mapeL.append(mapeAr)
-
-    # print(lable, sess.run(pred, feed_dict={X: input}))
-    # print(step, sess.run(loss, feed_dict={X: input, Y: lable}))
-
-rseA = np.array(rseL)
-mapeA = np.array(mapeL)
+    if(step > 0 and step % 2000 == 0):
+        predictTrain = sess.run(pred, feed_dict={X: train_inputs})
+        originalTrainPredicted = np.exp(np.array(predictTrain)) #np.exp(np.array(predictTrain))
+        originalTrainOutputs = np.exp(train_lables.ravel()) #np.exp(train_lables.ravel())
+        rse = ((originalTrainPredicted / originalTrainOutputs) - 1) ** 2
+        mapeAr = abs(originalTrainOutputs - originalTrainPredicted) / originalTrainOutputs
+        print("Original train RSE stats. Mean: %f, Std: %f Var: %f" % (rse.mean(), rse.std(), rse.var()))
+        print("Original train MAPE stats. Mean: %f, Std: %f Var: %f" % (mapeAr.mean(), mapeAr.std(), mapeAr.var()))
 
 
-print("Original RSE stats. Mean: %f, Std: %f Var: %f" % (rseA.mean(), rseA.std(), rseA.var()))
-print("Original MAPE stats. Mean: %f, Std: %f Var: %f" % (mapeA.mean(), mapeA.std(), mapeA.var()))
+test_inputs, test_lables = LoadCleanData("TEST")
 
+test_lables = np.reshape(test_lables, (len(test_lables), 1))
+predictTest =  sess.run(pred, feed_dict={X: test_inputs})
 
-        # print(step, sess.run(W, feed_dict={X: input, Y: lable}))
+originalPredicted = np.exp(np.array(predictTest))
+originalTestOutputs = np.exp(test_lables.ravel())
+rse = ((originalPredicted / originalTestOutputs) - 1) ** 2
+mapeAr = abs(originalTestOutputs - originalPredicted) / originalTestOutputs
+
+print("Original RSE stats. Mean: %f, Std: %f Var: %f" % (rse.mean(), rse.std(), rse.var()))
+print("Original MAPE stats. Mean: %f, Std: %f Var: %f" % (mapeAr.mean(), mapeAr.std(), mapeAr.var()))
+print("Done")
+
 
