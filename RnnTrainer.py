@@ -21,6 +21,7 @@ import matplotlib.mlab as mlab
 SEQUENCE_LENGTH = 8
 PREDICTION_DELTA = 4
 VIEWS_SCALE_KOEF = 0
+BATCH_SIZE = 1
 
 FILE_NAME = "_s:{}_p:{}".format(SEQUENCE_LENGTH, PREDICTION_DELTA)
 # views column index - 1. ['channel_subscribers', 'views', 'engagements', 'sentiment']
@@ -74,7 +75,7 @@ def LoadData(name):
 
     #df = df.drop(['engagements', 'channel_subscribers', 'sentiment'], axis = 1)
 
-    all_training_data = df.values
+    all_training_data = df['views'].values
     columnsCount = np.size(all_training_data, 1)
     inputs = np.reshape(all_training_data, (-1, BATCH_SIZE, SEQUENCE_LENGTH, columnsCount))
     output = np.reshape(all_lables, (-1, BATCH_SIZE))
@@ -250,7 +251,7 @@ def Train(num_units, cell_type, optimizer, learning_rate):
     # print ("Original sqrt RMSE: %f" % rmse)
 
     #rmseAr = (originalTestOutputs - originalPredicted) ** 2
-    mapeAr = (originalTestOutputs - originalPredicted) / originalTestOutputs
+    mapeAr = abs((originalTestOutputs - originalPredicted) / originalTestOutputs)
     rse = ((originalPredicted / originalTestOutputs) - 1)**2
     # rmseL = []
     # mapeL = []
@@ -267,7 +268,7 @@ def Train(num_units, cell_type, optimizer, learning_rate):
     # rmseAr = np.array(rmseL)
     # mapeAr = np.array(mapeL)
 
-    print("Original RSE stats. Mean: %f, Std: %f Var: %f" % (sqrt(rse.mean()), sqrt(rse.std()), sqrt(rse.var())))
+    print("Original RSE stats. Mean: %f, Std: %f Var: %f" % (rse.mean(), rse.std(), rse.var()))
 
     # print("Original RMSE stats. Mean: %f, Std: %f Var: %f" % (sqrt(rmseAr.mean()), sqrt(rmseAr.std()), sqrt(rmseAr.var())))
     #PrintHist(rmseAr, sqrt(rmseAr.std()), sqrt(rmseAr.mean()))

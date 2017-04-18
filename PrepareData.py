@@ -107,7 +107,7 @@ def PrepareVideoDfs(fileName, sequenceLength, weeksToPredict):
 
     gr = df.groupby(['videoid', pd.TimeGrouper('W')])
    # gr = gr.filter(lambda x: len(x) >= sequenceLength)
-    df = gr.agg({'views': np.mean, 'channel_subscribers': np.mean, 'engagement_rate': np.mean, 'sentiment': np.mean, 'videoid': np.random.choice})
+    #df = gr.agg({'views': np.mean, 'channel_subscribers': np.mean, 'engagement_rate': np.mean, 'sentiment': np.mean, 'videoid': np.random.choice})
     # df = gr.agg(lambda x: x.iloc[-1])
     # df = df.reset_index()
 
