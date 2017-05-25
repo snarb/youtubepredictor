@@ -31,38 +31,102 @@ def split_to_data_and_lables(dataFrame, time_steps, lable_delta):
             datas.append(npAr)
 
     return datas, labels
+
+def split_to_data_and_lables_v(dataFrame, time_steps, lable_delta):
+    """
+    creates new data frame based on previous observation
+      * example:
+        l = [1, 2, 3, 4, 5]
+        time_steps = 2
+        -> labels == False [[1, 2], [2, 3], [3, 4]]
+        -> labels == True [3, 4, 5]
+    """
+    datas = []
+    labels = []
+
+
+    for i in range(len(dataFrame) - time_steps):
+        dataEnd = i + time_steps
+        lableId = dataEnd + lable_delta - 1
+        if lableId < len(dataFrame):
+            lable = dataFrame['views'][lableId]
+            labels.append(lable)
+
+            curData = dataFrame.iloc[i: dataEnd]
+            npAr = curData.as_matrix(['views'])
+            datas.append(npAr)
+
+    return datas, labels
+
 #
 # def split_to_data_and_lables(data, time_steps, labels):
 
 
-def subsequences(ts, window, lablesShift):
-    rowsCount = ts.size - window - lablesShift + 1
-    shape = (rowsCount, window)
-    strides = (8,)
-    data = np.lib.stride_tricks.as_strided(ts, shape=shape, strides=strides)
+# def subsequences(ts, window, lablesShift):
+#     rowsCount = ts.size - window - lablesShift + 1
+#     shape = (rowsCount, window)
+#     strides = (8,)
+#     data = np.lib.stride_tricks.as_strided(ts, shape=shape, strides=strides)
+#
+#     lables = ts[window - 1 + lablesShift::1]
+#     return data, lables
+#
+# def rolling_window(ts, window, lablesShift):
+#     DATA_SIZE = ts.itemsize
+#     inputRowsCount = ts.shape[0]
+#     columnsCount = ts.shape[1]
+#     rowsCount = inputRowsCount - window - lablesShift + 1
+#     shape = (rowsCount, window, columnsCount)
+#     if(rowsCount < 0):
+#         r = 4
+#
+#     try:
+#
+#         strides = (DATA_SIZE * window,  DATA_SIZE * columnsCount,  DATA_SIZE)
+#         data = np.lib.stride_tricks.as_strided(ts, shape=shape, strides=strides)
+#
+#         lables = ts[window - 1 + lablesShift::1, 0] # ,0 - views column index
+#     except:
+#         print("Unexpected error:", sys.exc_info()[0])
+#
+#     return data, lables
 
-    lables = ts[window - 1 + lablesShift::1]
+def rolling_window(a, window, lablesShift):
+    shape = a.shape[:-1] + (a.shape[-1] - window +1, window)
+    strides = a.strides + (a.strides[-1],)
+
+    data =  np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+    lables = a[window - 1 + lablesShift::1]
     return data, lables
 
-def rolling_window(ts, window, lablesShift):
-    DATA_SIZE = ts.itemsize
-    inputRowsCount = ts.shape[0]
-    columnsCount = ts.shape[1]
-    rowsCount = inputRowsCount - window - lablesShift + 1
-    shape = (rowsCount, window, columnsCount)
-    if(rowsCount < 0):
-        r = 4
 
-    try:
+def GetMostPopularVideos(fileName, sequenceLength, weeksToPredict):
+    df = pd.read_csv('data/' + fileName,
+                       sep = ';',
+                       names = ['channelId', 'channel_subscribers', 'videoid', 'date', 'views', 'engagements', 'sentiment'],
+                       index_col = ['date'],
+                       #usecols = ['channel_subscribers', 'videoid', 'date', 'views', 'engagements', 'sentiment'],
+                       usecols=['videoid', 'date', 'views'],
+                       parse_dates=['date']
+                       )
 
-        strides = (DATA_SIZE * window,  DATA_SIZE * columnsCount,  DATA_SIZE)
-        data = np.lib.stride_tricks.as_strided(ts, shape=shape, strides=strides)
 
-        lables = ts[window - 1 + lablesShift::1, 0] # ,0 - views column index
-    except:
-        print("Unexpected error:", sys.exc_info()[0])
 
-    return data, lables
+    # datasL = []
+    # lablesL = []
+    dfs = []
+
+    for vId in df.groupby(['videoid'])['views'].max().nlargest(10).index:
+        videoDf = df[df.videoid == vId]
+        dfs.append(videoDf)
+
+        #data, lables = split_to_data_and_lables_v(videoDf, sequenceLength, weeksToPredict)
+        #datasL.append(data)
+        #lablesL.append(lables)
+
+        #return datasL, lablesL
+    return dfs
+
 
 def PrepareVideoDfs(fileName, sequenceLength, weeksToPredict):
     # LIMIT = 100
@@ -77,6 +141,7 @@ def PrepareVideoDfs(fileName, sequenceLength, weeksToPredict):
                        # usecols=['videoid', 'date', 'views'],
                        parse_dates=['date']
                        ) #nrows=100
+
 
     # scaler = MinMaxScaler(feature_range=(0.1, 0.8))
     #transformer = FunctionTransformer(np.log)
@@ -119,6 +184,7 @@ def PrepareVideoDfs(fileName, sequenceLength, weeksToPredict):
     # g = df.groupby(['videoid', pd.TimeGrouper('W')])
 # g.filter(lambda x: len(x) > 1)
 
+
     datasL = []
     lablesL = []
 
@@ -134,10 +200,11 @@ def PrepareVideoDfs(fileName, sequenceLength, weeksToPredict):
             if (minV < 0):
                 continue
 
-            #datas = videoDf.as_matrix(['views', 'channel_subscribers', 'engagement_rate', 'sentiment'])
-            data, lables = split_to_data_and_lables(videoDf, sequenceLength, weeksToPredict)
-            #data, lables = rolling_window(datas, sequenceLength, weeksToPredict)
 
+            #datas = videoDf.as_matrix(['views', 'channel_subscribers', 'engagement_rate', 'sentiment'])
+            #data, lables = split_to_data_and_lables(videoDf, sequenceLength, weeksToPredict)
+            #data, lables = rolling_window(datas, sequenceLength, weeksToPredict)
+            data, lables = rolling_window(videoDf, sequenceLength, weeksToPredict)
 
             #videoDf[['views']] = transformer.transform(videoDf[['views']])
             #looks bad! we must scale larger
@@ -162,6 +229,19 @@ def DumpTarget(fileName, sequenceLength, weeksToPredict):
     np.save('data/' + fileName + "_s:" + str(sequenceLength) + "_p:" + str(weeksToPredict) + "_training_data", all_training_data)
     np.save('data/' + fileName + "_s:" + str(sequenceLength) + "_p:" + str(weeksToPredict) + "_lables", all_lables)
 
+def DumpTopTarget(fileName, sequenceLength, weeksToPredict):
+        # all_training_data, all_lables = PrepareVideoDfs(fileName, sequenceLength, weeksToPredict)
+
+       dfs = GetMostPopularVideos(fileName, sequenceLength, weeksToPredict)
+       pickle.dump(dfs, open('top10.p', 'wb'))
+        # all_training_data = np.concatenate(all_training_data,  axis=0)
+        # all_lables = np.concatenate(all_lables,  axis=0)
+
+
+        # np.save('data/top_' + fileName + "_s:" + str(sequenceLength) + "_p:" + str(weeksToPredict) + "_training_data",
+        #         all_training_data)
+        # np.save('data/top_' + fileName + "_s:" + str(sequenceLength) + "_p:" + str(weeksToPredict) + "_lables", all_lables)
+
     # DumpTargetInternal(videoDfs, fileName, sequenceLength, weeksToPredict)
 
 def DumpTargetInternal(videoDfs, fileName, sequenceLength, weeksToPredict):
@@ -185,8 +265,8 @@ def DumpTargetInternal(videoDfs, fileName, sequenceLength, weeksToPredict):
 
 
 
-DumpTarget("TEST", sequenceLength = 8, weeksToPredict=4)
-DumpTarget("TRAIN", sequenceLength = 8, weeksToPredict=4)
+#DumpTopTarget("TEST", sequenceLength = 8, weeksToPredict=4)
+#DumpTarget("TRAIN", sequenceLength = 8, weeksToPredict=4)
 
 print("Done 1")
 DumpTarget("TEST", sequenceLength = 8, weeksToPredict=1)

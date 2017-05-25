@@ -5,9 +5,11 @@ from __future__ import print_function
 import os
 import urllib
 import urllib.request
-
+import pandas as pd
 import numpy as np
 import tensorflow as tf
+import pickle
+from matplotlib import pyplot as plt
 
 # Data sets
 IRIS_TRAINING = "iris_training.csv"
@@ -84,7 +86,7 @@ def main():
       .format(predictions))
 
 def subsequences(ts, window, lablesShift):
-    DATA_SIZE = 8
+    DATA_SIZE = ts.dtype.itemsize
     inputRowsCount = ts.shape[0]
     columnsCount = ts.shape[1]
     rowsCount = inputRowsCount - window - lablesShift + 1
@@ -95,28 +97,97 @@ def subsequences(ts, window, lablesShift):
     lables = ts[window - 1 + lablesShift::1]
     return data, lables
 
-def rolling_window(a, window):
+def rolling_window(a, window, lablesShift):
     shape = a.shape[:-1] + (a.shape[-1] - window +1, window)
+
     strides = a.strides + (a.strides[-1],)
-    lablesShape = a.shape[:-1] + (a.shape[-1] - window + 4 + 1, window)
 
     data =  np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
-    shape = np.lib.stride_tricks.as_strided(a, shape=lablesShape, strides=strides)
-    return data, shape
+    lables = a[window - 1 + lablesShift::1]
+    return data[:-lablesShift], lables
+
+def LoadTop10VideosData():
+    data = np.load('data/top_TEST_s:8_p:4_training_data.npy')
+    lables = np.load('data/top_TEST_s:8_p:4_lables.npy')
+    return data, lables
+
+def split_to_data_and_lables(dataFrame, time_steps, lable_delta):
+    """
+    creates new data frame based on previous observation
+      * example:
+        l = [1, 2, 3, 4, 5]
+        time_steps = 2
+        -> labels == False [[1, 2], [2, 3], [3, 4]]
+        -> labels == True [3, 4, 5]
+    """
+    datas = []
+    labels = []
+
+
+    for i in range(len(dataFrame) - time_steps):
+        dataEnd = i + time_steps
+        lableId = dataEnd + lable_delta - 1
+        if lableId < len(dataFrame):
+            lable = dataFrame['views'][lableId]
+            labels.append(lable)
+
+            curData = dataFrame.iloc[i: dataEnd]
+            npAr = curData.as_matrix(['views'])
+            datas.append(npAr)
+
+    return datas, labels
+
+def SimpleToDataAndLables(dataFrame, time_steps, lable_delta):
+    datas = []
+    labels = []
+
+
+    for i in range(len(dataFrame) - time_steps):
+        dataEnd = i + time_steps
+        lableId = dataEnd + lable_delta - 1
+        if lableId < len(dataFrame):
+            lable = dataFrame[lableId]
+            labels.append(lable)
+
+            curData = dataFrame[i: dataEnd]
+            datas.append(curData)
+
+    return datas, labels
 
 
 if __name__ == "__main__":
-    x = np.arange(48.0).reshape(12, 4)
-    for i in range(12):
-        x[i ,0] =  10*i
-        x[i, 1] =  10*i +1
-        x[i, 2] = 10*i + 2
-        x[i, 3] =  10*i + 3
+    s = np.load("badData.npy")
+    datas, labels = SimpleToDataAndLables(s[14:], 1, 301)
+    data, lable = rolling_window(s[14:], window=1, lablesShift=301)
+    koef = lable.ravel() / data.ravel()
+    if (koef > 1000).any():
+        print("Bad")
+    #data, lables = LoadTop10VideosData()
+    # dataFlist = pickle.load(open('top10.p', 'rb'))
+    # for videoDf in dataFlist:
+    #     data, lables = split_to_data_and_lables(videoDf, time_steps = 8, lable_delta=4)
+    #     data1, lables1 = rolling_window(videoDf['views'], 8, 4)
+    #
+    #     for i in range(len(data)):
+    #         assert(np.array_equal(data[i].reshape(data1[i].shape), data1[i]))
+    #         assert(np.array_equal(lables[i].reshape(lables1[i].shape), lables1[i]))
 
-    data, shape = subsequences(x, 4, 2)
 
-
-    main()
+    print("ok")
+    # x = np.arange(48.0).reshape(12, 4)
+    # for i in range(12):
+    #     x[i ,0] =  10*i
+    #     x[i, 1] =  10*i +1
+    #     x[i, 2] = 10*i + 2
+    #     x[i, 3] =  10*i + 3
+    # x = np.arange(7)
+    # # data1, shape1 = subsequences(x, 4, 2)
+    # data2, shape2 = rolling_window(x, 4, 2)
+    # data3, shape3 = split_to_data_and_lables(x, 4, 2)
+    # print("ok")
+    #
+    #
+    # main()
 
 #
 # import pandas as pd
