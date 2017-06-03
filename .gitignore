@@ -95,3 +95,9 @@ ENV/
 
 # mkdocs documentation
 /site
+/data/test.csv
+/data/train.csv
+/data/validation.csv
+misc.xml
+*.xml
+/.idea/*.iml
