@@ -168,6 +168,79 @@ def DfToList(df):
 #
 #     return avg;
 
+def TrainModel_2(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  minLen, maxLen):
+    trainVideos = shuffle(trainVideos)
+    testVideos = shuffle(testVideos)
+
+    trainDataProducer = DataProducer(trainVideos, seqLen = seqLen, deltasToExtractCount = TRAIN_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta, maxPredDelta = maxPredDelta,  minLen = minLen, maxLen = maxLen)
+    testDataProducer = DataProducer(testVideos, seqLen = seqLen, deltasToExtractCount = TEST_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta, maxPredDelta = maxPredDelta,  minLen = minLen, maxLen = maxLen)
+
+    X = tf.placeholder("float", shape=(None, SEQUENCE_LENGTH), name="Inputs")  # , COLUMNS_COUNT
+    Y = tf.placeholder("float", shape=(None, 1), name="Outputs")
+
+    W = tf.Variable(tf.ones([SEQUENCE_LENGTH, 1]), name="weight")  # COLUMNS_COUNT
+
+    pred = tf.reduce_sum(tf.matmul(X, W), axis=1)
+    loss = tf.reduce_mean(tf.square(pred / Y - 1))
+    grads = tf.gradients(loss, [W])[0]
+
+    optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
+    train = optimizer.minimize(loss)
+
+    init = tf.global_variables_initializer()
+
+    sess = tf.Session()
+    sess.run(init)
+    losses = []
+    koefs = []
+
+    for step in range(TRAIN_STEPS):
+        data, lables, lableDeltas = zip(*trainDataProducer.GetNextBatch())
+        inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
+        output = np.reshape(lables, (BATCH_SIZE, 1))
+        koef = lables[0] / data
+        koefs.append(koef.mean())
+
+        _, curLoss = sess.run([train, loss], feed_dict={X: inputs, Y: output})
+        losses.append(curLoss)
+
+
+        if (step % 9000 == 0):
+            Wval = sess.run(W, feed_dict={X: inputs, Y: output})
+            mnkoef = np.array(koefs).mean()
+            print(mnkoef, Wval)
+            cp = sess.run(pred, feed_dict={X: inputs})
+            pr2 = inputs * mnkoef
+            print(cp, pr2)
+            print("AVG loss: ", np.array(losses).mean())
+            losses.clear()
+
+    mapeArsTr = []
+
+    for step in range(TEST_STEPS):
+        data, lables, lableDeltas = zip(*testDataProducer.GetNextBatch())
+        inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
+        lableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
+        predictedLables = sess.run(pred, feed_dict={X: inputs})
+        mapeAr = abs(1 - np.exp(predictedLables) / np.exp(lables))
+        mapeArsTr.append(mapeAr.mean())
+
+
+    mapeArsTr = np.array(mapeArsTr)
+
+    mapeArs2 = []
+
+    for step in range(TEST_STEPS):
+        data, lables, lableDeltas = zip(*testDataProducer.GetNextBatch())
+        inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
+        lableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
+        predictedLables = inputs * np.array(koefs).mean()
+        mapeAr2 = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
+        mapeArs2.append(mapeAr2.mean())
+
+    mapeArsTr2 = np.array(mapeArs2)
+    print(mapeArsTr.mean(), mapeArsTr2.mean())
+    return mapeArsTr.mean(), mapeArsTr.var()
 
 def TrainModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  minLen, maxLen):
     trainVideos = shuffle(trainVideos)
@@ -176,26 +249,21 @@ def TrainModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  min
     trainDataProducer = DataProducer(trainVideos, seqLen = seqLen, deltasToExtractCount = TRAIN_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta, maxPredDelta = maxPredDelta,  minLen = minLen, maxLen = maxLen)
     testDataProducer = DataProducer(testVideos, seqLen = seqLen, deltasToExtractCount = TEST_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta, maxPredDelta = maxPredDelta,  minLen = minLen, maxLen = maxLen)
 
-
     lableShifts = tf.placeholder("float", shape=(BATCH_SIZE, 1), name="lablesShift")
     X = tf.placeholder("float", shape=(BATCH_SIZE, SEQUENCE_LENGTH), name="viewsHistoryInput")
     Y = tf.placeholder("float", shape=(BATCH_SIZE, 1), name="Outputs")
 
     W = tf.Variable(tf.ones([SEQUENCE_LENGTH]), name="weight")
     lsW = tf.Variable(tf.ones([SEQUENCE_LENGTH]), name="lableShiftsWeights")
-    #B = tf.Variable(tf.zeros([1]), name="bias")
-
-    predDeltaKoefs = lsW  * lableShifts
-    #predDeltaKoefs = lsW * lableShift
-
+    B = tf.Variable(tf.ones([1]), name="bias")
+    predDeltaKoefs = (B  + lableShifts) * lsW
     combinedWeights = predDeltaKoefs * W
-    #res = tf.matmul(X, combinedWeights)
     res = X * combinedWeights
     pred = tf.reduce_sum(res, axis=1)
     loss = tf.reduce_mean(tf.square(pred / Y - 1))
     #grads = tf.gradients(loss, [W])[0]
 
-    optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
+    optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
     train = optimizer.minimize(loss)
 
     init = tf.global_variables_initializer()
@@ -210,11 +278,18 @@ def TrainModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  min
     for step in range(TRAIN_STEPS):
         data, lables, lableDeltas = zip(*trainDataProducer.GetNextBatch())
         inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
-        lableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1)) / maxPredDelta
+        inputLableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
+        inputLableDeltas = ((inputLableDeltas - minPredDelta) / (maxPredDelta -  minPredDelta))
+
+        #inputLableDeltas = inputLableDeltas / (maxPredDelta - 1)
+
         output = np.reshape(lables, (BATCH_SIZE, 1))
 
-        #cp = sess.run(pred, feed_dict={X: inputs, lableShifts: lableDeltas})
-        _, curLoss = sess.run([train, loss], feed_dict={X: inputs, Y: output, lableShifts: lableDeltas})
+        cp = sess.run(pred, feed_dict={X: inputs, lableShifts: inputLableDeltas})
+        lsw_v = sess.run(lsW, feed_dict={X: inputs, Y: output})
+        b_v = sess.run(B, feed_dict={X: inputs, Y: output})
+
+        _, curLoss = sess.run([train, loss], feed_dict={X: inputs, Y: output, lableShifts: inputLableDeltas})
         q.append(curLoss)
         # for i in range(10):
         #     _, curLoss_i = sess.run([train, loss], feed_dict={X: inputs, Y: output, lableShifts: lableDeltas})
@@ -231,10 +306,12 @@ def TrainModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  min
     for step in range(TEST_STEPS):
         data, lables, lableDeltas = zip(*testDataProducer.GetNextBatch())
         inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
-        lableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
-        predictedLables = sess.run(pred, feed_dict={X: inputs, lableShifts: lableDeltas})
-        mapeAr = abs(1 - np.exp(predictedLables) / np.exp(lables))
-        mapeArs.append(mapeAr)
+        inputLableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
+        inputLableDeltas = ((inputLableDeltas - minPredDelta) / (maxPredDelta -  minPredDelta))
+
+        predictedLables = sess.run(pred, feed_dict={X: inputs, lableShifts: inputLableDeltas})
+        mapeAr = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
+        mapeArs.append(mapeAr.mean())
 
     mapeArs = np.array(mapeArs)
 
