@@ -2,6 +2,7 @@ import numpy as np
 from SETTINGS import *
 from itertools import repeat
 import random
+from collections import Counter
 
 class DataProducer:
 
@@ -24,6 +25,8 @@ class DataProducer:
         self.currentVideoIndex = 0
         self.currentBatchIndex = -1
         self.batchesStack = []
+        self.stats = Counter()
+
 
     # def rolling_window(a, window, lablesShift):
     #     shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
@@ -45,7 +48,6 @@ class DataProducer:
         #
         #
         # ids = random.sample(range(0, len(currentVideo) - ), 3)
-
         batch = []
 
         while True:
@@ -60,7 +62,9 @@ class DataProducer:
             if (len(currentVideo) > self.minLen and len(currentVideo) < self.maxLen):
                 while True:
                     predDelta = random.choice(range(self.minPredDelta, self.maxPredDelta))
+                    predDelta = self.minPredDelta
                     offset = random.choice(range(0, len(currentVideo) - (SEQUENCE_LENGTH + predDelta)))
+                    self.stats[offset] += 1
                     dateEnd = (offset + SEQUENCE_LENGTH)
                     data = currentVideo[offset : dateEnd]
                     datal = np.clip(np.log(data), a_min=STABLE_DELTA, a_max=99999999999)

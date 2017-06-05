@@ -15,6 +15,8 @@ from sklearn.cluster import KMeans
 from multiprocessing.dummy import Pool as ThreadPool, freeze_support
 from itertools import repeat
 
+print('Step: {} from: {}'.format(1, 2))
+
 # SEQUENCE_LENGTH = 8
 # PREDICTION_DELTA = 4
 VIDEO_LEN_LIMIT = 50

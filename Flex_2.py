@@ -19,6 +19,7 @@ from DataProducer import DataProducer
 from SETTINGS import *
 from sklearn.preprocessing import MinMaxScaler
 from queue import *
+from collections import Counter
 
 TO_AVG_COUNT = 10000
 
@@ -178,7 +179,10 @@ def TrainModel_2(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  m
     X = tf.placeholder("float", shape=(None, SEQUENCE_LENGTH), name="Inputs")  # , COLUMNS_COUNT
     Y = tf.placeholder("float", shape=(None, 1), name="Outputs")
 
-    W = tf.Variable(tf.ones([SEQUENCE_LENGTH, 1]), name="weight")  # COLUMNS_COUNT
+    #W = tf.Variable(tf.ones([SEQUENCE_LENGTH, 1]), name="weight")  # COLUMNS_COUNT
+    initW = np.array([-0.02386997, 0.0325182, 0.08833821, 0.14380269, 0.19896919, 0.25399742, 0.30848914], dtype='float32')
+    W = tf.Variable(initial_value =  initW.reshape((7 , 1)), name="weight")
+
 
     pred = tf.reduce_sum(tf.matmul(X, W), axis=1)
     loss = tf.reduce_mean(tf.square(pred / Y - 1))
@@ -193,54 +197,59 @@ def TrainModel_2(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  m
     sess.run(init)
     losses = []
     koefs = []
+    deltas = Counter()
 
-    for step in range(TRAIN_STEPS):
-        data, lables, lableDeltas = zip(*trainDataProducer.GetNextBatch())
-        inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
-        output = np.reshape(lables, (BATCH_SIZE, 1))
-        koef = lables[0] / data
-        koefs.append(koef.mean())
+    # for step in range(TRAIN_STEPS):
+    #     data, lables, lableDeltas = zip(*trainDataProducer.GetNextBatch())
+    #     #deltas.update(lableDeltas)
+    #     inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
+    #     output = np.reshape(lables, (BATCH_SIZE, 1))
+    #     koef = lables[-1] / data
+    #     koefs.append(koef.mean())
+    #
+    #     _, curLoss = sess.run([train, loss], feed_dict={X: inputs, Y: output})
+    #     losses.append(curLoss)
+    #
+    #
+    #     if (step % 9000 == 0):
+    #         Wval = sess.run(W, feed_dict={X: inputs, Y: output})
+    #         mnkoef = np.array(koefs).mean()
+    #         #print(mnkoef, Wval)
+    #         cp = sess.run(pred, feed_dict={X: inputs})
+    #        # pr2 = inputs * mnkoef
+    #        # print(cp, pr2)
+    #         print("AVG loss: ", np.array(losses).mean())
+    #         losses.clear()
 
-        _, curLoss = sess.run([train, loss], feed_dict={X: inputs, Y: output})
-        losses.append(curLoss)
+    mapeArs =  TestPerfomance(TEST_STEPS, X, None, maxPredDelta, minPredDelta, pred, sess, testDataProducer)
 
-
-        if (step % 9000 == 0):
-            Wval = sess.run(W, feed_dict={X: inputs, Y: output})
-            mnkoef = np.array(koefs).mean()
-            print(mnkoef, Wval)
-            cp = sess.run(pred, feed_dict={X: inputs})
-            pr2 = inputs * mnkoef
-            print(cp, pr2)
-            print("AVG loss: ", np.array(losses).mean())
-            losses.clear()
-
-    mapeArsTr = []
+    mapeArsTr2 = []
+    mnkoef = np.array(koefs).mean()
+    mnkoef = 1.02
 
     for step in range(TEST_STEPS):
         data, lables, lableDeltas = zip(*testDataProducer.GetNextBatch())
-        inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
-        lableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
-        predictedLables = sess.run(pred, feed_dict={X: inputs})
+        predictedLables = data[-1] * mnkoef
         mapeAr = abs(1 - np.exp(predictedLables) / np.exp(lables))
-        mapeArsTr.append(mapeAr.mean())
+        mapeArsTr2.append(mapeAr.mean())
 
 
-    mapeArsTr = np.array(mapeArsTr)
 
-    mapeArs2 = []
-
-    for step in range(TEST_STEPS):
-        data, lables, lableDeltas = zip(*testDataProducer.GetNextBatch())
-        inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
-        lableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
-        predictedLables = inputs * np.array(koefs).mean()
-        mapeAr2 = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
-        mapeArs2.append(mapeAr2.mean())
-
-    mapeArsTr2 = np.array(mapeArs2)
-    print(mapeArsTr.mean(), mapeArsTr2.mean())
-    return mapeArsTr.mean(), mapeArsTr.var()
+    print(mapeArs.mean())
+    print(Wval)
+    # mapeArs2 = []
+    #
+    # for step in range(TEST_STEPS):
+    #     data, lables, lableDeltas = zip(*testDataProducer.GetNextBatch())
+    #     inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
+    #     lableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
+    #     predictedLables = inputs * np.array(koefs).mean()
+    #     mapeAr2 = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
+    #     mapeArs2.append(mapeAr2.mean())
+    #
+    # mapeArsTr2 = np.array(mapeArs2)
+    # print(mapeArsTr.mean(), mapeArsTr2.mean())
+    return mapeArs.mean(), mapeArs.var()
 
 def TrainModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  minLen, maxLen):
     trainVideos = shuffle(trainVideos)
@@ -285,7 +294,7 @@ def TrainModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  min
 
         output = np.reshape(lables, (BATCH_SIZE, 1))
 
-        cp = sess.run(pred, feed_dict={X: inputs, lableShifts: inputLableDeltas})
+        predictedLables = sess.run(pred, feed_dict={X: inputs, lableShifts: inputLableDeltas})
         lsw_v = sess.run(lsW, feed_dict={X: inputs, Y: output})
         b_v = sess.run(B, feed_dict={X: inputs, Y: output})
 
@@ -296,26 +305,40 @@ def TrainModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  min
 
         #avgLoss = ApproxRollingAverage(avgLoss, curLoss, TO_AVG_COUNT)
         if (step % 5000 == 0):
+            mapeAr = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
+            print("Training mapeAr: ", mapeAr.mean())
             print("AVG loss: ", np.array(q).mean())
             q.clear()
             #print("AVG loss: ", np.array(list(q.queue)).mean())
             #print("W = ", sess.run(W))
 
-    mapeArs = []
-
-    for step in range(TEST_STEPS):
-        data, lables, lableDeltas = zip(*testDataProducer.GetNextBatch())
-        inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
-        inputLableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
-        inputLableDeltas = ((inputLableDeltas - minPredDelta) / (maxPredDelta -  minPredDelta))
-
-        predictedLables = sess.run(pred, feed_dict={X: inputs, lableShifts: inputLableDeltas})
-        mapeAr = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
-        mapeArs.append(mapeAr.mean())
+    mapeArs =  TestPerfomance(TEST_STEPS, X, lableShifts, maxPredDelta, minPredDelta, pred, sess, testDataProducer)
 
     mapeArs = np.array(mapeArs)
 
     return mapeArs.mean(), mapeArs.var()
+
+
+def TestPerfomance(testSteps, X, lableShifts, maxPredDelta, minPredDelta, pred, sess, testDataProducer):
+    mapeArs = []
+
+
+    for step in range(testSteps):
+        data, lables, lableDeltas = zip(*testDataProducer.GetNextBatch())
+        inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
+        inputLableDeltas = np.reshape(lableDeltas, (BATCH_SIZE, 1))
+        inputLableDeltas = ((inputLableDeltas - minPredDelta) / (maxPredDelta - minPredDelta))
+
+        if(lableShifts is not None):
+            predictedLables = sess.run(pred, feed_dict={X: inputs, lableShifts: inputLableDeltas})
+        else:
+            predictedLables = sess.run(pred, feed_dict={X: inputs})
+
+        mapeAr = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
+        mapeArs.append(mapeAr.mean())
+
+    return mapeArs
+
 
 def GetRegrouppedViews(trainDf, testDf):
     return DfToList(trainDf), DfToList(testDf)
