@@ -2,8 +2,9 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.utils import shuffle
+from SETTINGS import *
 
-def CalcKoefs(trainVideos, testVideos, offset, predDelta):
+def CalcKoefs(trainVideos, testVideos, offset, predDelta, seqLen):
     print("Offset:", offset)
     print("Delta:", predDelta)
     #mnkoef = 1.02
@@ -15,9 +16,10 @@ def CalcKoefs(trainVideos, testVideos, offset, predDelta):
     koefs = []
     for video in trainVideos:
         video = np.log(video)
+        video = np.clip(video, a_min=STABLE_DELTA, a_max=99999999999)
         #video = video[30:]
-        if len(video) > offset + predDelta:
-            koef =  video[offset + predDelta] / video[offset]
+        if len(video) > offset + predDelta + seqLen:
+            koef =  video[offset + seqLen + predDelta] / video[offset + seqLen]
             koefs.append(koef)
             # if(koef < 5):
             #     koefs.append(koef)

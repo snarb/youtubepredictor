@@ -1,8 +1,8 @@
 
 from matplotlib import pyplot as plt
-from Flex_2 import TrainModel,TrainModel_2, LoadData, GetRegrouppedViews
+from Flex_2 import TrainModel,TrainModel_2, LoadData, GetRegrouppedViews, TrainKerasModel
 from DataPreprocessor import LoadData, GetRegrouppedViews
-# from SETTINGS import *
+from SETTINGS import *
 # import sys
 from ExploreData import CalcKoefs
 from matplotlib.font_manager import FontProperties
@@ -14,7 +14,7 @@ trainDf = LoadData('train')
 testDf = LoadData('validation')
 trainViewsD, testViewsD = GetRegrouppedViews(trainDf, testDf)
 
-ataConf = CalcKoefs(trainViewsD, testViewsD, offset = 30,  predDelta =30)
+#ataConf = CalcKoefs(trainViewsD, testViewsD, offset = 0,  predDelta =30, seqLen=7)
 #
 # datas = []
 # predDeltas = []
@@ -36,8 +36,8 @@ ataConf = CalcKoefs(trainViewsD, testViewsD, offset = 30,  predDelta =30)
 # plt.show()
 # print("Done")
 
-#TrainModel(trainViewsD, testViewsD, seqLen=SEQUENCE_LENGTH, minPredDelta=1, maxPredDelta=120, minLen=180, maxLen=None)
-TrainModel_2(trainViewsD, testViewsD, minPredDelta=1, maxPredDelta=30, minLen=31, maxLen=None, daysToremove = 0)
+#TrainModel(trainViewsD, testViewsD, seqLen=SEQUENCE_LENGTH, minPredDelta=1, maxPredDelta=60, minLen=70, maxLen=None, daysToremove = 0)
+#TrainModel_2(trainViewsD, testViewsD, minPredDelta=1, maxPredDelta=30, minLen=31, maxLen=None, daysToremove = 0)
 
 
 # while (True):
@@ -47,3 +47,4 @@ TrainModel_2(trainViewsD, testViewsD, minPredDelta=1, maxPredDelta=30, minLen=31
 #     except:
 #         print ("Unexpected error:", sys.exc_info()[0])
 
+TrainModel_2(trainViewsD, testViewsD, minPredDelta=1, maxPredDelta=60, minLen=70, maxLen=None, daysToremove = 0)

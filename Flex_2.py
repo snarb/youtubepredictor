@@ -210,26 +210,24 @@ def TestW(initW, testDataProducer, maxPredDelta, minPredDelta):
 
 def TrainModel_2(trainVideos, testVideos, minPredDelta, maxPredDelta,  minLen, maxLen, daysToremove):
 
-    mnkoef = 1.02
-
-
-
-    trainVideos = shuffle(trainVideos)
-    testVideos = shuffle(testVideos)
-
-    trainDataProducer = DataProducer(trainVideos, seqLen = SEQUENCE_LENGTH, deltasToExtractCount = TRAIN_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta,
-                                     maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToRemove = daysToremove)
-    testDataProducer = DataProducer(testVideos, seqLen = SEQUENCE_LENGTH, deltasToExtractCount = TEST_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta,
-                                    maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToRemove = daysToremove)
+    #mnkoef = 1.02
 
 
 
 
 
 
-    re1 = TestKoef(testDataProducer, 1.01472223)
-    # re2 = TestKoef(testDataProducer, 1.06342916958)
-    # re3 = TestKoef(testDataProducer, 1.0282758673)
+    # Conf median Int:  [1.0378694542222604, 1.039592767081895]
+    # mean median conf int 1.03873111065
+    # Conf Data Int:  [1.004664572080036, 1.3090827022428926]
+    # mean data conf 1.15687363716
+    # mean  1.06778123217
+    # median  1.03877626202
+
+    #re1 = TestKoef(testDataProducer, 1.01472223)
+
+    # Best stats for mean median conf: (0.3466564213913722, 0.26809115608045392)
+
 
     # r5 = TestW([1.01670313], testDataProducer, maxPredDelta, minPredDelta)
     # r6 = TestW([1.01414716], testDataProducer, maxPredDelta, minPredDelta)
@@ -242,27 +240,60 @@ def TrainModel_2(trainVideos, testVideos, minPredDelta, maxPredDelta,  minLen, m
 
     # initW = np.array([1.01414716], dtype='float32')
     # W = tf.Variable(initial_value=initW.reshape((1, 1)), name="weight")
-    initW = np.array(
-        [[-0.87001145],
-         [-0.51743203],
-         [-0.19237655],
-         [0.14398399],
-         [0.47978213],
-         [0.81472701],
-         [1.14944446]], dtype='float32')
-    W = tf.Variable(initial_value =  initW.reshape((7 , 1)), name="weight")
+
+    # initW = np.array(
+    #     [[-0.87001145],
+    #      [-0.51743203],
+    #      [-0.19237655],
+    #      [0.14398399],
+    #      [0.47978213],
+    #      [0.81472701],
+    #      [1.14944446]], dtype='float32')
+
+    initW = np.array([[-0.24137977],
+     [-0.33408758],
+     [-0.56187832],
+     [-0.64038277],
+     [-0.26425102],
+     [ 0.62445462],
+     [ 2.41232538]], dtype='float32')
 
 
-
+    W = tf.Variable(initial_value =  initW.reshape((7 , 1)), name="weight", trainable=False)
     pred = tf.reduce_sum(tf.matmul(X, W), axis=1)
+
+    n_hidden_1 = 32
+    n_hidden_2 = 32
+
+    W2 = tf.Variable(tf.random_normal([SEQUENCE_LENGTH, n_hidden_1]), name="w2")
+    B2 = tf.Variable(tf.random_normal([n_hidden_1]), name="b2")
+    layer_1 = tf.add(tf.matmul(X, W2), B2)
+    layer_1 = tf.nn.relu(layer_1)
+
+    W3 = tf.Variable(tf.random_normal([n_hidden_1, n_hidden_2]), name="w3")
+    B3 = tf.Variable(tf.random_normal([n_hidden_2]), name="b3")
+
+    layer_2 = tf.add(tf.matmul(layer_1, W3), B3)
+    layer_2 = tf.nn.relu(layer_2)
+
+    w_out = tf.Variable(tf.random_normal([n_hidden_2, 1]), name="w_out")
+    b_out = tf.Variable(tf.random_normal([n_hidden_2]), name="b_out")
+
+    out_layer = tf.matmul(layer_2, w_out) + b_out
+    loss = tf.reduce_mean(tf.square(out_layer / Y - 1))
+
 
     #ape = (pred / Y - 1)
     #loss = tf.cond(ape < 1.0, lambda: tf.abs(ape), lambda: tf.square(ape))
 
-    loss = tf.reduce_mean(tf.abs(tf.exp(pred) / tf.exp(Y) - 1))
-    grads = tf.gradients(loss, [W])[0]
+    #loss = tf.reduce_mean(tf.square(pred/ Y - 1))
+    #loss = tf.reduce_mean(tf.abs(tf.exp(pred) / tf.exp(Y) - 1))
+
+    #loss = tf.reduce_mean(tf.abs(pred/ Y - 1))
+    #grads = tf.gradients(loss, [W])[0]
 
     optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
+    #optimizer = tf.train.GradientDescentOptimizer(0.0001)
     train = optimizer.minimize(loss)
 
     init = tf.global_variables_initializer()
@@ -270,28 +301,41 @@ def TrainModel_2(trainVideos, testVideos, minPredDelta, maxPredDelta,  minLen, m
     sess = tf.Session()
     sess.run(init)
 
-    mapeArs =  TestClassPerfomance(X, None, maxPredDelta, minPredDelta, pred, sess, trainDataProducer, testDataProducer)
+    #mapeArs =  TestClassPerfomance(X, None, maxPredDelta, minPredDelta, pred, sess, trainDataProducer, testDataProducer)
 
 
     losses = []
-    koefs = []
     deltas = Counter()
+
+    trainVideos = shuffle(trainVideos)
+    testVideos = shuffle(testVideos)
+
+    trainDataProducer = DataProducer(trainVideos, seqLen = SEQUENCE_LENGTH, deltasToExtractCount = TRAIN_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta,
+                                     maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToRemove = daysToremove)
+    testDataProducer = DataProducer(testVideos, seqLen = SEQUENCE_LENGTH, deltasToExtractCount = TEST_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta,
+                                    maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToRemove = daysToremove)
+
+
+
+    mapeArs =  TestPerfomance(TEST_STEPS, X, None, maxPredDelta, minPredDelta, pred, sess, testDataProducer)
+    print("Init perf: Mean: Median")
+    minMean = np.mean(mapeArs)
+    minMedian = np.median(mapeArs)
+    minWmean = 0
+    minWmedian = 0
+    print(minMean, minMedian)
 
     for step in range(TRAIN_STEPS):
         data, lables, lableDeltas = zip(*trainDataProducer.GetNextBatch())
         #deltas.update(lableDeltas)
         inputs = np.reshape(data, (BATCH_SIZE, SEQUENCE_LENGTH))
         output = np.reshape(lables, (BATCH_SIZE, 1))
-        koef = lables[-1] / data
-        koefs.append(koef.mean())
-
         _, curLoss = sess.run([train, loss], feed_dict={X: inputs, Y: output})
         losses.append(curLoss)
 
 
-        if (step % 9000 == 0):
+        if (step % 15000 == 0):
             Wval = sess.run(W, feed_dict={X: inputs, Y: output})
-            mnkoef = np.array(koefs).mean()
             #print(mnkoef, Wval)
             cp = sess.run(pred, feed_dict={X: inputs})
            # pr2 = inputs * mnkoef
@@ -299,11 +343,32 @@ def TrainModel_2(trainVideos, testVideos, minPredDelta, maxPredDelta,  minLen, m
             print("AVG loss: ", np.array(losses).mean())
             losses.clear()
 
+            mapeArs = TestPerfomance(TEST_STEPS, X, None, maxPredDelta, minPredDelta, pred, sess, testDataProducer)
+            mean = mapeArs.mean()
+            median = np.median(mapeArs)
+            print(mean, median)
+
+            pritW = False
+            if(mean < minMean):
+                pritW = True
+                minMean = mean
+                minWmean = sess.run(W, feed_dict={X: inputs, Y: output})
+
+            if(median < minMedian):
+                pritW = True
+                minMedian = median
+                minWmedian = sess.run(W, feed_dict={X: inputs, Y: output})
+
+            if(pritW):
+                print(sess.run(W, feed_dict={X: inputs, Y: output}))
+
+
     mapeArs =  TestPerfomance(TEST_STEPS, X, None, maxPredDelta, minPredDelta, pred, sess, testDataProducer)
     mn = np.mean(mapeArs)
     print(mn)
     resW = sess.run(W, feed_dict={X: inputs, Y: output})
     print(resW)
+    print("Done")
     #mnkoef = np.array(koefs).mean()
 
 
@@ -326,16 +391,28 @@ def TrainModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  min
     trainVideos = shuffle(trainVideos)
     testVideos = shuffle(testVideos)
 
-    trainDataProducer = DataProducer(trainVideos, seqLen = seqLen, deltasToExtractCount = TRAIN_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta, maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToremove = daysToremove)
-    testDataProducer = DataProducer(testVideos, seqLen = seqLen, deltasToExtractCount = TEST_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta, maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToremove = daysToremove)
+    trainDataProducer = DataProducer(trainVideos, seqLen = SEQUENCE_LENGTH, deltasToExtractCount = TRAIN_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta,
+                                     maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToRemove = daysToremove)
+    testDataProducer = DataProducer(testVideos, seqLen = SEQUENCE_LENGTH, deltasToExtractCount = TEST_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta,
+                                    maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToRemove = daysToremove)
 
     lableShifts = tf.placeholder("float", shape=(BATCH_SIZE, 1), name="lablesShift")
     X = tf.placeholder("float", shape=(BATCH_SIZE, SEQUENCE_LENGTH), name="viewsHistoryInput")
     Y = tf.placeholder("float", shape=(BATCH_SIZE, 1), name="Outputs")
 
-    W = tf.Variable(tf.ones([SEQUENCE_LENGTH]), name="weight")
-    lsW = tf.Variable(tf.ones([SEQUENCE_LENGTH]), name="lableShiftsWeights")
-    B = tf.Variable(tf.ones([1]), name="bias")
+    initW = np.array([ 0.15289065,  0.19918267,  0.2341571 ,  0.26491246,  0.29034972,
+        0.31426078,  0.33612537], dtype='float32')
+
+    W = tf.Variable(initial_value = initW, name="weight")
+
+    inLsw = np.array([0.15289067, 0.19918275, 0.2341571, 0.2649124, 0.29034981,
+           0.31426069, 0.33612537], dtype='float32')
+
+    lsW = tf.Variable(initial_value = inLsw.reshape(SEQUENCE_LENGTH), name="lableShiftsWeights")
+
+    initBw = np.array([ 1.7117914], dtype='float32')
+
+    B = tf.Variable(tf.ones(initial_value = initBw), name="bias")
     predDeltaKoefs = (B  + lableShifts) * lsW
     combinedWeights = predDeltaKoefs * W
     res = X * combinedWeights
@@ -387,7 +464,56 @@ def TrainModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  min
 
     mapeArs = np.array(mapeArs)
 
+    saver = tf.train.Saver()
+    saver.save(sess, 'predDeltaM')
+
     return mapeArs.mean(), mapeArs.var()
+
+def TrainKerasModel(trainVideos, testVideos, seqLen, minPredDelta, maxPredDelta,  minLen, maxLen, daysToremove):
+
+    model = Sequential()
+    #model.add(Dense(7, activation='linear', input_dim=SEQUENCE_LENGTH))
+    model.add(Dense(32, activation='relu', input_dim=SEQUENCE_LENGTH))
+    # model.add(Dense(32, activation='relu'))
+    # model.add(Dense(32, activation='relu'))
+    model.add(Dense(1, activation='linear'))
+    model.compile(optimizer='nadam', loss='mean_absolute_percentage_error')
+
+
+
+    trainVideos = shuffle(trainVideos)
+    testVideos = shuffle(testVideos)
+
+    trainDataProducer = DataProducer(trainVideos, seqLen = SEQUENCE_LENGTH, deltasToExtractCount = TRAIN_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta,
+                                     maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToRemove = daysToremove)
+    testDataProducer = DataProducer(testVideos, seqLen = SEQUENCE_LENGTH, deltasToExtractCount = TEST_DELTAS_TO_EXTRACT, minPredDelta = minPredDelta,
+                                    maxPredDelta = maxPredDelta, minVideoLen= minLen, maxLenToUse= maxLen, daysToRemove = daysToremove)
+
+    datas_l = []
+    lables_l = []
+    for step in range(10000):
+        data, lables, lableDeltas = zip(*trainDataProducer.GetNextBatch())
+        datas_l.append(data[0] / 18)
+        lables_l.append(lables[0] / 18)
+
+    model.fit(np.array(datas_l), np.array(lables_l), epochs=50, batch_size=40)
+    predictedLables = model.predict(np.array(datas_l))
+    mapeAr = abs(1 - np.exp(predictedLables.ravel() * 18) / np.exp(np.array(lables_l) * 18))
+    n = mapeAr.mean()
+
+    test_datas_l = []
+    test_lables_l = []
+    for step in range(10000):
+        data, lables, lableDeltas = zip(*testDataProducer.GetNextBatch())
+        test_datas_l.append(data[0])
+        test_lables_l.append(lables[0])
+
+    print("Done")
+
+        # predictedLables = model.predict()
+        # mapeAr = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
+        # mapeArs.append(mapeAr.mean())
+
 
 def TestClassPerfomance(X, lableShifts, maxPredDelta, minPredDelta, pred, sess, trainDataProducer, testProd):
     mapeArs = []
@@ -403,8 +529,10 @@ def TestClassPerfomance(X, lableShifts, maxPredDelta, minPredDelta, pred, sess, 
     #               metrics=['accuracy'])
 
     model.compile(optimizer='adam',
-                  loss='mean_absolute_percentage_error',
-                  metrics=['accuracy'])
+                  loss='mean_absolute_percentage_error')
+
+    datas = []
+    lables = []
 
     data_reg = []
     lables_reg = []
@@ -426,6 +554,7 @@ def TestClassPerfomance(X, lableShifts, maxPredDelta, minPredDelta, pred, sess, 
 
         mapeAr = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
         mapeArs.append(mapeAr.mean())
+
 
         data_reg.append(data[0])
         lables_reg.append(lables[0])
@@ -496,7 +625,7 @@ def TestPerfomance(testSteps, X, lableShifts, maxPredDelta, minPredDelta, pred, 
         mapeAr = abs(1 - np.exp(predictedLables.ravel()) / np.exp(lables))
         mapeArs.append(mapeAr.mean())
 
-    return mapeArs
+    return np.array(mapeArs)
 
 
 def GetRegrouppedViews(trainDf, testDf):

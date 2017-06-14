@@ -66,7 +66,7 @@ class DataProducer:
             self.currentVideoIndex += 1
 
             if (len(currentVideo) > self.minVideoLen):
-                while True:
+                #while True: ToDo: Remove!!!!!!!
                     predDelta = random.choice(range(self.minPredDelta, self.maxPredDelta))
                     predDelta = 30
                     offset = random.choice(range(0, len(currentVideo) - (SEQUENCE_LENGTH + predDelta)))
